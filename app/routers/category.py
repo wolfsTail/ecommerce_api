@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Category
 from app.schemas import CreateCategory
+from app.routers.auth import get_current_user
 
 
 router = APIRouter(
@@ -23,65 +24,84 @@ async def get_all_categories(db: Annotated[AsyncSession, Depends(get_db)]):
 
 @router.post('/create')
 async def create_category(
-    db: Annotated[AsyncSession, Depends(get_db)], create_category: CreateCategory
+    db: Annotated[AsyncSession, Depends(get_db)], 
+    create_category: CreateCategory,
+    get_user: Annotated[dict, Depends(get_current_user)]
     ) -> dict:
-    await db.execute(
-        insert(Category).values(
-            name=create_category.name,
-            parent_id=create_category.parent_id,
-            slug=slugify(create_category.name)
+    if get_user.get('is_admin'):
+        await db.execute(
+            insert(Category).values(
+                name=create_category.name,
+                parent_id=create_category.parent_id,
+                slug=slugify(create_category.name)
+            )
         )
-    )
-    await db.commit()
+        await db.commit()
 
-    return {
-        "status_code": status.HTTP_201_CREATED,
-        "transaction": "OK!"
-    }
+        return {
+            "status_code": status.HTTP_201_CREATED,
+            "transaction": "OK!"
+        }
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail='You have not any credentials for create a category!'
+    )        
 
 @router.put('/update_category')
 async def update_category(
     db: Annotated[AsyncSession, Depends(get_db)],
     category_id: int,
     update_category: CreateCategory,
+    get_user: Annotated[dict, Depends(get_current_user)]
     ):
-    query = select(Category).where(Category.id == category_id)
-    category = await db.scalar(query)
+    if get_user.get('is_admin'):
+        query = select(Category).where(Category.id == category_id)
+        category = await db.scalar(query)
 
-    if category is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Category not found!"
+        if category is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Category not found!"
+            )
+        
+        active_query = update(Category).where(Category.id == category_id).values(
+            name=update_category.name, parent_id=update_category.parent_id
         )
-    
-    active_query = update(Category).where(Category.id == category_id).values(
-        name=update_category.name, parent_id=update_category.parent_id
-    )
-    await db.execute(active_query)
-    await db.commit()
-    return {
-        "status_code": status.HTTP_200_OK,
-        "transaction": "Category update succes!"
-    }
+        await db.execute(active_query)
+        await db.commit()
+        return {
+            "status_code": status.HTTP_200_OK,
+            "transaction": "Category update succes!"
+        }
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail='You have not any credentials for create a category!'
+    ) 
 
 @router.delete('/delete')
 async def delete_category(
     db: Annotated[AsyncSession, Depends(get_db)],
-    category_id: int
+    category_id: int,
+    get_user: Annotated[dict, Depends(get_current_user)]
     ):
-    query = select(Category).where(Category.id == category_id)
-    category = await db.scalar(query)
+    if get_user.get('is_admin'):
+        query = select(Category).where(Category.id == category_id)
+        category = await db.scalar(query)
 
-    if category is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Category not found!"
-        )
-    
-    active_query = update(Category).where(Category.id == category_id).values(is_active=False)
-    await db.execute(active_query)
-    await db.commit()
-    return {
-        "status_code": status.HTTP_200_OK,
-        "transaction": "Delete succes!"
-    }
+        if category is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Category not found!"
+            )
+        
+        active_query = update(Category).where(Category.id == category_id).values(is_active=False)
+        await db.execute(active_query)
+        await db.commit()
+        return {
+            "status_code": status.HTTP_200_OK,
+            "transaction": "Delete succes!"
+        }
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail='You have not any credentials for create a category!'
+    ) 
