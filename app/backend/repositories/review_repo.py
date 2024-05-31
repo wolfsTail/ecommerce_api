@@ -1,5 +1,5 @@
-from models import Review
-from backend.repositories.base_repo import BaseRepo
+from app.models import Review
+from app.backend.repositories.base_repo import BaseRepo
 
 
 class ReviewRepository(BaseRepo):

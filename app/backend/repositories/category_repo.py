@@ -1,5 +1,5 @@
-from models import Category
-from backend.repositories.base_repo import BaseRepo
+from app.models import Category
+from app.backend.repositories.base_repo import BaseRepo
 
 
 class CategoryRepository(BaseRepo):

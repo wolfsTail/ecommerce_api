@@ -17,14 +17,15 @@ class CategoryService:
     def __init__(self, uow: AbstractUnitOfWork) -> None:
         self.uow = uow
 
-    async def get_all(self) -> list[ResponseCategory]:
+    async def get_all(self) -> list[Category]:
         filters = {
             "is_active": True,
         }
         async with self.uow:
-            categories = await self.uow.categories.get_by_filter(filters=filters)
+            categories = await self.uow.categories.get_by_filter(
+                filters=filters, db_session=self.uow.session)
             if categories:
-                response = [ResponseCategory.model_validate(category) for category in categories]
+                response = categories
                 return response
             return []
 

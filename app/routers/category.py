@@ -19,8 +19,7 @@ router = APIRouter(
 )
 
 @router.get(
-        '/all_categories', 
-        response_model=list[ResponseCategory]
+        '/all_categories',         
         )
 async def get_all_categories(
     service: CategoryService = Depends(get_category_service)

@@ -5,5 +5,8 @@ class CreateCategory(BaseModel):
     name: str
     parent_id: int | None = None
 
-class ResponseCategory(CreateCategory):
+class ResponseCategory(BaseModel):
     id: int
+    name: str
+    slug: str
+    is_active: bool

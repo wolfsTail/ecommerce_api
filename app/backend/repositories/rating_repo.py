@@ -1,5 +1,5 @@
-from models import Rating
-from backend.repositories.base_repo import BaseRepo
+from app.models import Rating
+from app.backend.repositories.base_repo import BaseRepo
 
 
 class RatingRepository(BaseRepo):

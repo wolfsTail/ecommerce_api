@@ -17,10 +17,6 @@ class AbstractUnitOfWork(ABC):
     reviews: ReviewRepository
 
     @abstractmethod
-    def __init__(self):
-        pass
-
-    @abstractmethod
     async def __aenter__(self):
         pass
 
