@@ -69,7 +69,26 @@ async def add_review(
             review_id=review_from_bd.id,
         )
         await db.execute(query)
-        await db.commit()
+
+        avg_query = (
+            select(
+                func.avg(Rating.value).label("average_rating")
+            )
+            .select_from(Review)
+            .join(Rating, Review.id == Rating.review_id)
+            .where(Review.product_id == review.product_id, Review.is_active == True)
+        )
+
+        result = await db.execute(avg_query)
+        result = result.all()
+        avg_rating = float(result[0].average_rating) if result[0].average_rating else 0.00
+
+        update_product = update(Product).\
+                         where(Product.id == review.product_id).\
+                         values(rating=avg_rating)
+        await db.execute(update_product)
+
+        await db.commit()      
 
         return {
             "status_code": status.HTTP_200_OK,
@@ -94,17 +113,19 @@ async def products_reviews(
         )
 
     reviews_query = (
-        select(
-            Review.id.label("review_id"),
-            Review.comment,
-            Review.user_id,
-            Review.comment_date,
-            func.avg(Rating.value).label("average_rating")
+            select(
+                Review.id.label("review_id"),
+                Review.comment,
+                Review.user_id,
+                Review.comment_date,
+                func.avg(Rating.value).label("average_rating"),
+                Product.rating.label("product_average_rating")  # Общий средний рейтинг продукта
+            )
+            .join_from(Review, Rating, Review.id == Rating.review_id)
+            .join(Product, Product.id == Review.product_id)  # Джоиним таблицу Product для доступа к общему рейтингу
+            .where(Review.product_id == product.id, Review.is_active == True)
+            .group_by(Review.id, Product.id)  # Группируем также по Product.id для корректности агрегации
         )
-        .join_from(Review, Rating, Review.id == Rating.review_id)
-        .where(Review.product_id == product.id, Review.is_active == True)
-        .group_by(Review.id)
-    )
     reviews_result = await db.execute(reviews_query)
     reviews = reviews_result.all()
 
@@ -121,7 +142,7 @@ async def products_reviews(
                 "comment": review.comment,
                 "user_id": review.user_id,
                 "comment_date": review.comment_date.isoformat(),
-                "average_rating": float(review.average_rating) if review.average_rating else None
+                "average_rating": float(review.product_average_rating) if review.product_average_rating else None
             }
             for review in reviews
         ]
