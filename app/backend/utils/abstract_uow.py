@@ -1,7 +1,20 @@
 from abc import ABC, abstractmethod
 
+from app.backend.repositories import (
+    CategoryRepository,
+    UserRepository,
+    ProductRepository,
+    RatingRepository,
+    ReviewRepository,
+)
+
 
 class AbstractUnitOfWork(ABC):
+    categories: CategoryRepository
+    products: ProductRepository
+    users: UserRepository
+    ratings: RatingRepository
+    reviews: ReviewRepository
 
     @abstractmethod
     def __init__(self):

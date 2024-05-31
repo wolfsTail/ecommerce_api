@@ -3,35 +3,38 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, status, HTTPException
 from sqlalchemy import insert, select, update
 from slugify import slugify
+from app.backend.db_depends import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.backend.db_depends import get_db
 from app.models import Category
 from app.schemas import CreateCategory, ResponseCategory
 from app.routers.auth import get_current_user
-from app.backend.service import CategoryService
-from app.backend.utils.depends import get_category_service
+from app.backend.utils.abstract_uow import AbstractUnitOfWork
 
 
-router = APIRouter(
-    prefix='/category',
-    tags=['category']
-)
 
-@router.get(
-        '/all_categories', 
-        response_model=list[ResponseCategory]
-        )
-async def get_all_categories(
-    service: CategoryService = Depends(get_category_service)
-    ):
-    categories = await service.get_all()
-    if categories:
-        return categories
-    raise HTTPException(status_code=404, detail="Не найдено ни одной категории")
-   
+class CategoryService:
+    def __init__(self, uow: AbstractUnitOfWork) -> None:
+        self.uow = uow
 
-@router.post('/create')
+    async def get_all(self) -> list[ResponseCategory]:
+        filters = {
+            "is_active": True,
+        }
+        async with self.uow:
+            categories = await self.uow.categories.get_by_filter(filters=filters)
+            if categories:
+                response = [ResponseCategory.model_validate(category) for category in categories]
+                return response
+            return []
+
+
+async def get_all_categories(db: Annotated[AsyncSession, Depends(get_db)]):
+    query = select(Category).where(Category.is_active == True)
+    categories = await db.scalars(query)
+    return categories.all()    
+
+
 async def create_category(
     db: Annotated[AsyncSession, Depends(get_db)], 
     create_category: CreateCategory,
@@ -56,7 +59,7 @@ async def create_category(
         detail='You have not any credentials for create a category!'
     )        
 
-@router.put('/update_category')
+
 async def update_category(
     db: Annotated[AsyncSession, Depends(get_db)],
     category_id: int,
@@ -87,7 +90,7 @@ async def update_category(
         detail='You have not any credentials for create a category!'
     ) 
 
-@router.delete('/delete')
+
 async def delete_category(
     db: Annotated[AsyncSession, Depends(get_db)],
     category_id: int,
@@ -113,4 +116,4 @@ async def delete_category(
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail='You have not any credentials for create a category!'
-    ) 
+    )
