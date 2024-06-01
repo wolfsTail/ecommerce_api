@@ -1,4 +1,4 @@
-from .category import CreateCategory, ResponseCategory
+from .category import CreateCategory, ResponseCategory, UpdateCategory
 from .product import CreateProduct
 from .review import RequestReview
 
@@ -8,4 +8,5 @@ __all__ = [
     "ResponseCategory",
     "CreateProduct",
     "RequestReview",
+    "UpdateCategory",
 ]

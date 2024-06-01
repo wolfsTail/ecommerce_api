@@ -10,3 +10,9 @@ class ResponseCategory(BaseModel):
     name: str
     slug: str
     is_active: bool
+
+class UpdateCategory(BaseModel):
+    id: int
+    name: str
+    is_active: bool
+    parent_id: int | None = None

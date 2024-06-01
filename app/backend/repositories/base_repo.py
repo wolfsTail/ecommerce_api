@@ -66,7 +66,6 @@ class BaseRepo:
         result = await db_session.execute(stmt)
         return result.scalar_one()
 
-
     @classmethod
     async def update_one(
         cls, item_id:int, db_session: AsyncSession, data: dict
