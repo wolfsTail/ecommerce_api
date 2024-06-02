@@ -1,74 +1,69 @@
-from typing import Annotated
-
-from fastapi import APIRouter, Depends, status, HTTPException
-from sqlalchemy import insert, select, update
 from slugify import slugify
-from sqlalchemy.ext.asyncio import AsyncSession
+from app.models import Product
+from app.schemas import CreateProduct, ResponseProduct
 
-from app.backend.service import ProductService
-from app.backend.utils.depends import get_product_service
-from app.backend.db_depends import get_db
-from app.models import Product, Category
-from app.schemas import CreateProduct
-from app.routers.permissions import get_current_user
+from app.backend.utils.abstract_uow import AbstractUnitOfWork
 from app.backend.utils.exceptions import NoCategoryError, NoProductByCategoryError
 
 
-router = APIRouter(
-    prefix="/products", 
-    tags=["products"]
-)
-
-
-@router.get("/")
-async def all_products(
-    service: Annotated[ProductService, Depends(get_product_service)]
-):
-    products = await service.get_all_products()
-    if not products:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Products not found!"
-        )
-    return products
-        
-
-@router.post("/create")
-async def create_product(
-    service: Annotated[ProductService, Depends(get_product_service)], 
-    create_product: CreateProduct,
-    get_user: Annotated[dict, Depends(get_current_user)],
-    ) -> dict:
-        new_product = await service.create_product(
-            create_product, get_user
-        )
-        if isinstance(new_product, int) and new_product==-1:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail='You are not authorized to use this method!'
-            )
-        return {
-            "status_code": status.HTTP_201_CREATED,
-            "transaction": 'Successful',
-            "created": new_product,
-        }
-
-
-@router.get("/{category_slug}")
-async def product_by_category(
-    service: Annotated[ProductService, Depends(get_product_service)],
-    category_slug: str
-):
-    try:
-        products = await service.get_products_by_category(category_slug)
+class ProductService:
+    def __init__(self, uow: AbstractUnitOfWork) -> None:
+        self.uow = uow
+    
+    async def get_all_products(self):
+        async with self.uow:
+            products = await self.uow.products.get_all(self.uow.session)
         return products
-    except NoCategoryError as err:
-        raise HTTPException(
-            status_code=err.descr, detail=err.detail
-        )
-    except NoProductByCategoryError as err:
-        raise HTTPException(
-            status_code=err.descr, detail=err.detail
-        )
+    
+    async def create_product(
+            self, created_product: CreateProduct, get_user: dict):
+        if get_user.get('is_admin') or get_user.get('is_supplier'):
+            created_product: dict = {
+                    "name": created_product.name,
+                    "slug": slugify(created_product.name),
+                    "description": created_product.description,
+                    "price": created_product.price,
+                    "image_url": created_product.image_url,
+                    "stock": created_product.stock,
+                    "category_id": created_product.category,
+                    "supplier_id": get_user.get('id'),
+                    "rating": 0.00,
+            }
+            async with self.uow:
+                new_product = await self.uow.products.create_one(
+                    created_product, self.uow.session
+                    )
+                return new_product
+        return -1
+    
+    async def get_products_by_category(
+            self, category_slug
+    ):
+        async with self.uow:
+            filters = {
+                "slug": category_slug
+            }
+            category = await self.uow.categories.get_by_filter(
+                filters, self.uow.session
+                )
+            if not category:
+                raise NoCategoryError
+            
+            filters = {
+                "parent_id": category.id
+            }
+            subcategories = await self.uow.categories.get_by_filter(
+                filters, self.uow.session
+                )
+            categories_and_subcategories = (
+                [category.id] + [i.id for i in subcategories.all()]
+            )
+            products = await self.uow.products.get_products_by_categories(
+                self.uow.session, categories_and_subcategories
+            )
+            if not products:
+                raise NoProductByCategoryError
+            return products
 
     
 

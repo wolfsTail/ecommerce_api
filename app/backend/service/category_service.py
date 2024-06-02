@@ -1,14 +1,6 @@
-from typing import Annotated
-
-from fastapi import APIRouter, Depends, status, HTTPException
-from sqlalchemy import insert, select, update
-from slugify import slugify
-from app.backend.db_depends import get_db
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.models import Category
 from app.schemas import CreateCategory, ResponseCategory, UpdateCategory
-from app.routers.auth import get_current_user
+
 from app.backend.utils.abstract_uow import AbstractUnitOfWork
 
 
@@ -17,17 +9,19 @@ class CategoryService:
     def __init__(self, uow: AbstractUnitOfWork) -> None:
         self.uow = uow
 
-    async def get_all(self) -> list[Category]:
+    async def get_all(self):
         filters = {
             "is_active": True,
         }
         async with self.uow:
             categories = await self.uow.categories.get_by_filter(
                 filters=filters, db_session=self.uow.session)
-            if categories:
-                response = categories
-                return response
-            return []
+            # if categories:
+            #     response = [
+            #         ResponseCategory.model_validate(category) for category in categories
+            #         ]
+            #     return response
+            return categories
     
     async def create_category(
             self, category: CreateCategory, get_user: dict,

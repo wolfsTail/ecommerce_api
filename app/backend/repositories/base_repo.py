@@ -40,7 +40,7 @@ class BaseRepo:
         ) -> model_name:
         stmt = select(cls.model_name).filter_by(id=item_id)
         result = await db_session.execute(stmt)
-        return result.scalar_one_or_none()
+        return result.mappings().one_or_none()
     
     @classmethod
     async def get_by_filter(
@@ -48,7 +48,7 @@ class BaseRepo:
     ) -> list[model_name]:
         stmt = select(cls.model_name).filter_by(**filters)
         result = await db_session.execute(stmt)
-        return result.scalars().all()
+        return result.mappings().all()
 
     @classmethod
     async def get_all(
@@ -56,7 +56,7 @@ class BaseRepo:
         ) -> list[model_name]:
         stmt = select(cls.model_name)
         result = await db_session.execute(stmt)
-        return result.scalars().all()
+        return result.mappings().all()
 
     @classmethod
     async def create_one(
@@ -64,7 +64,7 @@ class BaseRepo:
         ) -> model_name:
         stmt = insert(cls.model_name).values(**data).returning(cls.model_name)
         result = await db_session.execute(stmt)
-        return result.scalar_one()
+        return result.mappings().one_or_none()
 
     @classmethod
     async def update_one(
@@ -77,7 +77,7 @@ class BaseRepo:
             .returning(cls.model_name)
         )
         result = await db_session.execute(stmt)
-        return result.scalar_one_or_none()
+        return result.mappings().one_or_none()
 
     @classmethod
     async def delete_one(cls, item_id: int, db_session: AsyncSession) -> bool:

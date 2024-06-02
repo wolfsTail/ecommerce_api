@@ -21,10 +21,10 @@ from app.backend.repositories import (
 
 class UnitOfWork(AbstractUnitOfWork):
     categories: CategoryRepository = get_category_repo()
-    products: ProductRepository = Depends(get_product_repo)
-    users: UserRepository = Depends(get_user_repo)
-    ratings: RatingRepository = Depends(get_rating_repo)
-    reviews: ReviewRepository = Depends(get_review_repo)
+    products: ProductRepository = get_product_repo()
+    users: UserRepository = get_user_repo()
+    ratings: RatingRepository = get_rating_repo()
+    reviews: ReviewRepository = get_review_repo()
 
     def __init__(self) -> None:
         self.session_factory = async_session_maker
