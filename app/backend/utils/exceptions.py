@@ -1,5 +1,26 @@
 from fastapi import status
 
+
+class NoItemError(Exception):
+    descr = status.HTTP_404_NOT_FOUND
+    detail = "Item is not found"
+    
+
+class NotTheOwnerOfProduct(Exception):
+    descr = status.HTTP_403_FORBIDDEN
+    detail = "You are not a owner of this product!"      
+
+
+class NoUserCredentials(Exception):
+    descr = status.HTTP_403_FORBIDDEN
+    detail = "You have no need credentials to do this method!"  
+
+
+class NoProductBySlugError(Exception):
+    descr = status.HTTP_404_NOT_FOUND
+    detail = "Product not found!"
+
+
 class NoCategoryError(Exception):
     descr = status.HTTP_404_NOT_FOUND
     detail = "Category not found!"

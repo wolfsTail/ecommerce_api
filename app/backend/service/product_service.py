@@ -3,7 +3,14 @@ from app.models import Product
 from app.schemas import CreateProduct, ResponseProduct
 
 from app.backend.utils.abstract_uow import AbstractUnitOfWork
-from app.backend.utils.exceptions import NoCategoryError, NoProductByCategoryError
+from app.backend.utils.exceptions import (
+    NoCategoryError, 
+    NoProductByCategoryError,
+    NoProductBySlugError,
+    NoUserCredentials,
+    NotTheOwnerOfProduct,
+    NoItemError,
+)
 
 
 class ProductService:
@@ -64,82 +71,64 @@ class ProductService:
             if not products:
                 raise NoProductByCategoryError
             return products
-
     
-
-@router.get("/detail/{product_slug}")
-async def product_detail(db: Annotated[AsyncSession, Depends(get_db)], product_slug: str):
-    query = select(Product).where(Product.slug == product_slug)
-    product = await db.scalar(query)
-
-    if product is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found!")
-    
-    return product    
-
-@router.put("/detail/{product_slug}")
-async def update_product(
-    db: Annotated[AsyncSession, Depends(get_db)], 
-    create_product: CreateProduct,
-    product_slug: str,
-    get_user: Annotated[dict, Depends(get_current_user)]
-    ) -> dict:
-
-    query = select(Product).where(Product.slug == product_slug)
-    product = await db.scalar(query)
-
-    if product is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found!")
-    
-    if get_user.get('is_supplier') or get_user.get('is_admin'):
-        if get_user.get('id') == product.supplier_id or get_user.get('is_admin'):
-
-
-            active_query = update(Product).where(Product.slug == product_slug).values(
-                name=create_product.name,
-                slug=slugify(create_product.name),
-                description=create_product.description,
-                price=create_product.price,
-                image_url=create_product.image_url,
-                stock=create_product.stock,
-                category_id=create_product.category,
+    async def get_product_details(
+            self, product_slug: str,
+    ):
+        async with self.uow:
+            filters = {
+                "slug": product_slug,
+            }
+            product = await self.uow.products.get_by_filter(
+                filters, self.uow.session,
             )
-            await db.execute(active_query)
-            await db.commit()
-
-            return {
-                "status_code": status.HTTP_200_OK,
-                "transaction": 'Product update is successful',
-            }
-    raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail='You are not authorized to use this method'
-        )
-
-@router.delete("/delete")
-async def delete_product(db: Annotated[AsyncSession, Depends(get_db)], 
-                         product_id: int,
-                         get_user: Annotated[dict, Depends(get_current_user)]):
-    query = select(Product).where(Product.id == product_id)
-    product = await db.scalar(query)
-
-    if product is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Product not found!"
-        )
+            if not product:
+                raise NoProductBySlugError
+            return product.first()
     
-    if get_user.get('is_supplier') or get_user.get('is_admin'):
-        if get_user.get('id') == product.supplier_id or get_user.get('is_admin'):  
-            active_query = update(Product).where(Product.id == product_id).values(is_active=False)
-            await db.execute(active_query)
-            await db.commit()
-            return {
-                "status_code": status.HTTP_200_OK,
-                "transaction": 'Product delete is successful',
+    async def update_product_by_slug(
+            self, updated_product: CreateProduct, product_slug: str, get_user: dict,
+    ):
+        async with self.uow:
+            filters = {
+                "slug": product_slug,
             }
+            product = await self.uow.products.get_by_filter(
+                filters, self.uow.session,
+            ).first()
+            if not product:
+                raise NoProductBySlugError
+            
+            if get_user.get('is_supplier') or get_user.get('is_admin'):
+                if get_user.get('id') == product.supplier_id or get_user.get('is_admin'):
+                    updated_product: dict = {
+                        "name": updated_product.name,
+                        "slug": slugify(updated_product.name),
+                        "description": updated_product.description,
+                        "price": updated_product.price,
+                        "image_url": updated_product.image_url,
+                        "stock": updated_product.stock,
+                        "category_id": updated_product.category,
+                    }
+                    updated_item = await self.uow.products.update_one(
+                        product.id, self.uow.session, updated_product
+                    )
+                    return updated_item
+                raise NotTheOwnerOfProduct
+            raise NoUserCredentials
     
-    raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail='You are not authorized to use this method'
-        )
+    async def delete_product(
+            self, product_id: int, get_user: dict 
+    ):
+        async with self.uow:
+            if get_user.get('is_supplier') or get_user.get('is_admin'):
+                product = await self.uow.products.get_one(product_id, self.uow.session)
+                if get_user.get('id') == product.supplier_id or get_user.get('is_admin'): 
+                    deleted_item_flag = await self.uow.products.delete_one(
+                        product_id, self.uow.session,
+                    )
+                    if not deleted_item_flag:
+                        raise NoItemError
+                    return deleted_item_flag
+                raise NotTheOwnerOfProduct
+            raise NoUserCredentials
