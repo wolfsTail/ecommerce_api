@@ -1,6 +1,11 @@
 from fastapi import status
 
 
+class YouAreNotAdmin(Exception):
+    descr = status.HTTP_401_UNAUTHORIZED
+    detail = "You are not an admin!"    
+
+
 class NoItemError(Exception):
     descr = status.HTTP_404_NOT_FOUND
     detail = "Item is not found"

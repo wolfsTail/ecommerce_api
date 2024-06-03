@@ -1,12 +1,14 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.backend.service import UserService
+from app.backend.utils.depends import get_user_service
 from app.routers.auth import get_current_user
-from app.models.user import User
-from app.backend.db_depends import get_db
+from app.backend.utils.exceptions import (
+    YouAreNotAdmin,
+    NoItemError,
+)
 
 
 router = APIRouter(
@@ -16,68 +18,43 @@ router = APIRouter(
 
 @router.patch('/')
 async def set_supplier_permission(
-    db: Annotated[AsyncSession, Depends(get_db)],
+    service: Annotated[UserService, Depends(get_user_service)],
     get_user: Annotated[dict, Depends(get_current_user)],
     user_id: int
 ):
-    if get_user.get('is_admin'):
-        user = await db.scalar(select(User).where(User.id == user_id))
-    
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail='User not found'
-            )    
-        if user.is_suplier:
-            await db.execute(update(User).where(User.id == user_id).values(is_suplier=False, is_customer=True))
-            await db.commit()
-            return {
-                'status_code': status.HTTP_200_OK,
-                'detail': 'User is no longer supplier'
-            }
-        else:
-            await db.execute(update(User).where(User.id == user_id).values(is_suplier=True, is_customer=False))
-            await db.commit()
-            return {
-                'status_code': status.HTTP_200_OK,
-                'detail': 'User is now supplier'
-            }
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="You are not a admin"
+    try:
+        detail = await service.set_permissions(
+            user_id, get_user
         )
+        return {
+                'status_code': status.HTTP_200_OK,
+                'detail': detail,
+            }
+    except (
+        YouAreNotAdmin,
+        NoItemError,
+    ) as err:
+        raise HTTPException(
+            status_code=err.descr, detail=err.detail
+        )
+
 
 @router.delete('/delete')
 async def delete_user(
-    db: Annotated[AsyncSession, Depends(get_db)],
+    service: Annotated[UserService, Depends(get_user_service)],
     get_user: Annotated[dict, Depends(get_current_user)],
-    user_id: int
+    user_id: int,
 ):
-    if get_user.get('is_admin'):
-        user = await db.scalar(select(User).where(User.id == user_id))
-    
-        if not user:
+        try:
+            detail = await service.set_user_status(user_id, get_user)
+            return {
+                'status_code': status.HTTP_200_OK,
+                'detail': detail
+            }
+        except (
+            YouAreNotAdmin,
+            NoItemError,
+        ) as err:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail='User not found'
-            )    
-        if user.is_active:
-            await db.execute(update(User).where(User.id == user_id).values(is_active=False))
-            await db.commit()
-            return {
-                'status_code': status.HTTP_200_OK,
-                'detail': 'User is deleted'
-            }
-        else:
-            await db.execute(update(User).where(User.id == user_id).values(is_active=True))
-            await db.commit()
-            return {
-                'status_code': status.HTTP_200_OK,
-                'detail': 'User is activated'
-            }
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="You are not a admin"
-        )
+                status_code=err.descr, detail=err.detail
+            )       
