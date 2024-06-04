@@ -6,10 +6,20 @@ class YouAreNotAdmin(Exception):
     detail = "You are not an admin!"    
 
 
+class IncorrectCredentailsError(Exception):
+    descr=status.HTTP_401_UNAUTHORIZED,
+    detail = 'Invalid credentails'
+
+
 class NoItemError(Exception):
     descr = status.HTTP_404_NOT_FOUND
     detail = "Item is not found"
-    
+
+
+class NoUserError(NoItemError):
+    descr = status.HTTP_404_NOT_FOUND
+    detail = "User is not found"
+
 
 class NotTheOwnerOfProduct(Exception):
     descr = status.HTTP_403_FORBIDDEN

@@ -1,14 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.backend.utils.abstract_uow import AbstractUnitOfWork
-from app.routers.auth import get_current_user
-from app.models.user import User
-from app.backend.db_depends import get_db
+
+from app.backend.utils.authentication import check_password, hash_password
+from app.schemas.user import CreateUser
 from app.backend.utils.exceptions import (
     YouAreNotAdmin,
     NoItemError,
+    NoUserError,
+    IncorrectCredentailsError,
 )
 
 
@@ -27,7 +25,19 @@ class UserService:
                 user_id, self.uow.session
             )
             if not current_user:
-                raise NoItemError
+                raise NoUserError
+            return current_user
+        
+    async def _get_current_user_by_username(self, username: str):
+        async with self.uow:
+            filters = {
+                "username": username,
+            }
+            current_user = await self.uow.users.get_by_filter(
+                filters, self.uow.session
+            ).first()
+            if not current_user or not current_user.is_active:
+                raise NoUserError
             return current_user
     
     async def set_permissions(
@@ -68,4 +78,29 @@ class UserService:
                     "is_active": True,
                 }
                 await self.uow.users.update_one(user_id, self.uow.session, values)
-                return "User is activated!"                
+                return "User is activated!"
+    
+    async def authenticate_user(
+            self, username: str, password: str
+    ):
+        async with self.uow:
+            user = await self._get_current_user_by_username(username)
+
+            if check_password(password, user.hashed_password):
+                raise IncorrectCredentailsError
+            
+            return user
+    
+    async def create_user(
+            self, user: CreateUser
+    ):
+        async with self.uow:
+            values = {
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "username": user.username,
+            "email": user.email,
+            "hashed_password": hash_password(user.password)
+            }
+            await self.uow.users.create_one(values, self.uow.session)
+            return None    
