@@ -20,7 +20,8 @@ from app.backend.repositories import (
 from app.backend.service import (
     CategoryService,
     ProductService,
-    UserService
+    UserService,
+    ReviewService,
 )
 
 
@@ -32,3 +33,6 @@ def get_product_service(uow: AbstractUnitOfWork = Depends(UnitOfWork)) -> Produc
 
 def get_user_service(uow: AbstractUnitOfWork = Depends(UnitOfWork)) -> UserService:
     return UserService(uow)
+
+def get_review_service(uow: AbstractUnitOfWork = Depends(UnitOfWork)) -> ReviewService:
+    return ReviewService(uow)

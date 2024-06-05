@@ -16,11 +16,11 @@ class CategoryService:
         async with self.uow:
             categories = await self.uow.categories.get_by_filter(
                 filters=filters, db_session=self.uow.session)
-            # if categories:
-            #     response = [
-            #         ResponseCategory.model_validate(category) for category in categories
-            #         ]
-            #     return response
+            if categories:
+                response = [
+                    ResponseCategory.model_validate(category) for category in categories
+                    ]
+                return response
             return categories
     
     async def create_category(

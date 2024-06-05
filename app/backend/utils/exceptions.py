@@ -23,7 +23,12 @@ class NoUserError(NoItemError):
 
 class NotTheOwnerOfProduct(Exception):
     descr = status.HTTP_403_FORBIDDEN
-    detail = "You are not a owner of this product!"      
+    detail = "You are not a owner of this product!"
+
+
+class NotTheBuyerOfProduct(Exception):
+    descr = status.HTTP_403_FORBIDDEN
+    detail = "You are not a buyer of this product!"    
 
 
 class NoUserCredentials(Exception):
