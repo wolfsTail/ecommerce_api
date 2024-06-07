@@ -1,13 +1,16 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status, HTTPException
-from sqlalchemy.orm import Session
 from sqlalchemy import insert, select, update
 from slugify import slugify
-from app.backend.db_depends import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.backend.db_depends import get_db
 from app.models import Category
-from app.schemas import CreateCategory
+from app.schemas import CreateCategory, ResponseCategory, UpdateCategory
+from app.routers.auth import get_current_user
+from app.backend.service import CategoryService
+from app.backend.utils.depends import get_category_service
 
 
 router = APIRouter(
@@ -15,73 +18,72 @@ router = APIRouter(
     tags=['category']
 )
 
-@router.get('/all_categories')
-async def get_all_categories(db: Annotated[Session, Depends(get_db)]):
-    query = select(Category).where(Category.is_active == True)
-    categories = db.scalars(query).all()
-    return categories    
+@router.get(
+        '/all_categories',         
+        )
+async def get_all_categories(
+    service: Annotated[CategoryService, Depends(get_category_service)]
+    ):
+    categories = await service.get_all()
+    if categories:
+        return categories
+    raise HTTPException(status_code=404, detail="Не найдено ни одной категории")
+
 
 @router.post('/create')
 async def create_category(
-    db: Annotated[Session, Depends(get_db)], create_category: CreateCategory
-    ) -> dict:
-    db.execute(
-        insert(Category).values(
-            name=create_category.name,
-            parent_id=create_category.parent_id,
-            slug=slugify(create_category.name)
-        )
+    creating_category: CreateCategory,
+    get_user: Annotated[dict, Depends(get_current_user)],
+    service: Annotated[CategoryService, Depends(get_category_service)],
+):
+    result = await service.create_category(
+        creating_category, get_user
     )
-    db.commit()
-
-    return {
-        "status_code": status.HTTP_201_CREATED,
-        "transaction": "OK!"
-    }
-
-@router.put('/update_category')
-async def update_category(
-    db: Annotated[Session, Depends(get_db)],
-    category_id: int,
-    update_category: CreateCategory,
-    ):
-    query = select(Category).where(Category.id == category_id)
-    category = db.scalar(query)
-
-    if category is None:
+    if not result:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Category not found!"
-        )
-    
-    active_query = update(Category).where(Category.id == category_id).values(
-        name=update_category.name, parent_id=update_category.parent_id
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail='You have not any credentials for create a category!'
     )
-    db.execute(active_query)
-    db.commit()
-    return {
-        "status_code": status.HTTP_200_OK,
-        "transaction": "Category update succes!"
-    }
+    return result
+
+
+@router.put('/update')
+async def update_category(
+    updating_category: UpdateCategory,
+    get_user: Annotated[dict, Depends(get_current_user)],
+    service: Annotated[CategoryService, Depends(get_category_service)],
+):
+    result = await service.update_category(
+        updating_category, get_user
+    )
+    if not result:
+        raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Category not found!"
+    )
+    if isinstance(result, int):
+        raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail='You have not any credentials for create a category!'
+    )
+    return result
+
 
 @router.delete('/delete')
 async def delete_category(
-    db: Annotated[Session, Depends(get_db)],
-    category_id: int
-    ):
-    query = select(Category).where(Category.id == category_id)
-    category = db.scalar(query)
-
-    if category is None:
+    category_id: int, 
+    get_user: Annotated[dict, Depends(get_current_user)],
+    service: Annotated[CategoryService, Depends(get_category_service)]
+):
+    result = await service.delete_category(category_id, get_user)
+    if not result:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Category not found!"
-        )
-    
-    active_query = update(Category).where(Category.id == category_id).values(is_active=False)
-    db.execute(active_query)
-    db.commit()
-    return {
-        "status_code": status.HTTP_200_OK,
-        "transaction": "Delete succes!"
-    }
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Category not found!"
+    )
+    if not isinstance(result, bool):
+        raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail='You have not any credentials for create a category!'
+    )
+    return result

@@ -1,13 +1,19 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy import insert, select, update
-from slugify import slugify
-from app.backend.db_depends import get_db
 
-from app.models import Product, Category
+from app.backend.service import ProductService
+from app.backend.utils.depends import get_product_service
 from app.schemas import CreateProduct
+from app.routers.permissions import get_current_user
+from app.backend.utils.exceptions import (
+    NoCategoryError, 
+    NoProductByCategoryError, 
+    NoProductBySlugError,
+    NoUserCredentials,
+    NotTheOwnerOfProduct,
+    NoItemError,
+)
 
 
 router = APIRouter(
@@ -17,106 +23,110 @@ router = APIRouter(
 
 
 @router.get("/")
-async def all_products(db: Annotated[Session, Depends(get_db)]):
-    query = select(Product).where(Product.is_active == True, Product.stock > 0)
-    products = db.scalars(query).all()
-    return products    
+async def all_products(
+    service: Annotated[ProductService, Depends(get_product_service)]
+):
+    products = await service.get_all_products()
+    if not products:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Products not found!"
+        )
+    return products
+        
 
 @router.post("/create")
 async def create_product(
-    db: Annotated[Session, Depends(get_db)], create_product: CreateProduct
+    service: Annotated[ProductService, Depends(get_product_service)], 
+    create_product: CreateProduct,
+    get_user: Annotated[dict, Depends(get_current_user)],
     ) -> dict:
-    db.execute(
-        insert(Product).values(
-            name=create_product.name,
-            slug=slugify(create_product.name),
-            description=create_product.description,
-            price=create_product.price,
-            image_url=create_product.image_url,
-            stock=create_product.stock,
-            category_id=create_product.category,
-            rating=0.00,
+        new_product = await service.create_product(
+            create_product, get_user
         )
-    )
-    db.commit()
+        if isinstance(new_product, int) and new_product==-1:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail='You are not authorized to use this method!'
+            )
+        return {
+            "status_code": status.HTTP_201_CREATED,
+            "transaction": 'Successful',
+            "created": new_product,
+        }
 
-    return {
-        "status_code": status.HTTP_201_CREATED,
-        "transaction": 'Successful',
-    }
 
 @router.get("/{category_slug}")
-async def product_by_category(db: Annotated[Session, Depends(get_db)], category_slug: str):
-    query = select(Category).where(Category.slug == category_slug)
-    category = db.scalar(query)
-    subcategories = db.scalars(select(Category).where(Category.parent_id == category.id)).all()
-    subcategories.append(category.id)
-    query = select(Product).where(
-        Product.is_active == True, 
-        Product.stock > 0, 
-        Product.category_id.in_(subcategories)
+async def product_by_category(
+    service: Annotated[ProductService, Depends(get_product_service)],
+    category_slug: str
+):
+    try:
+        products = await service.get_products_by_category(category_slug)
+        return products
+    except NoCategoryError as err:
+        raise HTTPException(
+            status_code=err.descr, detail=err.detail
         )
-    products = db.scalars(query).all()
-    return products
+    except NoProductByCategoryError as err:
+        raise HTTPException(
+            status_code=err.descr, detail=err.detail
+        )
+
     
 
 @router.get("/detail/{product_slug}")
-async def product_detail(db: Annotated[Session, Depends(get_db)], product_slug: str):
-    query = select(Product).where(Product.slug == product_slug)
-    product = db.scalar(query)
-
-    if product is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found!")
-    
-    return product    
-
-@router.put("/detail/{product_slug}")
-async def update_product(
-    db: Annotated[Session, Depends(get_db)], 
-    create_product: CreateProduct,
+async def product_detail(
+    service: Annotated[ProductService, Depends(get_product_service)],
     product_slug: str
-    ) -> dict:
-
-    query = select(Product).where(Product.slug == product_slug)
-    product = db.scalars(query).one_or_none()
-
-    if product is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found!")
+    ):
+    try:
+        product = await service.get_product_details(product_slug)
+        return product
+    except NoProductBySlugError as err:
+        raise HTTPException(
+            status_code=err.descr, 
+            detail=err.detail
+            )
     
-    active_query = update(Product).where(Product.slug == product_slug).values(
-        name=create_product.name,
-        slug=slugify(create_product.name),
-        description=create_product.description,
-        price=create_product.price,
-        image_url=create_product.image_url,
-        stock=create_product.stock,
-        category_id=create_product.category,
-        rating=0.00,
-    )
 
-    db.execute(active_query)
-    db.commit()
+@router.put("/{product_slug}")
+async def update_product(
+    service: Annotated[ProductService, Depends(get_product_service)], 
+    updated_product: CreateProduct,
+    product_slug: str,
+    get_user: Annotated[dict, Depends(get_current_user)]
+    ):
+    try:
+        item = await service.update_product_by_slug(
+            updated_product, product_slug, get_user
+        )
+        return item
+    except (
+        NoProductBySlugError, 
+        NotTheOwnerOfProduct, 
+        NoUserCredentials
+        ) as err:
+        raise HTTPException(
+            status_code=err.descr, detail=err.detail
+        )
 
-    return {
-        "status_code": status.HTTP_200_OK,
-        "transaction": 'Product update is successful',
-    }
 
 @router.delete("/delete")
-async def delete_product(db: Annotated[Session, Depends(get_db)], product_id: int):
-    query = select(Product).where(Product.id == product_id)
-    product = db.scalar(query)
-
-    if product is None:
+async def delete_product(
+    service: Annotated[ProductService, Depends(get_product_service)],
+    product_id: int,
+    get_user: Annotated[dict, Depends(get_current_user)]
+    ):
+    try:
+        await service.delete_product(product_id, get_user)
+        return {
+            "message": "deleted!"
+        }
+    except ( 
+        NotTheOwnerOfProduct, 
+        NoUserCredentials,
+        NoItemError,
+        ) as err:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Product not found!"
+            status_code=err.descr, detail=err.detail
         )
-    
-    active_query = update(Product).where(Product.id == product_id).values(is_active=False)
-    db.execute(active_query)
-    db.commit()
-    return {
-        "status_code": status.HTTP_200_OK,
-        "transaction": 'Product delete is successful',
-    }

@@ -8,4 +8,8 @@ class CreateProduct(BaseModel):
     image_url: str
     stock: int
     category: int
+
+
+class ResponseProduct(CreateProduct):
+    id: int
     
