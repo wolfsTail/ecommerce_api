@@ -1,19 +1,9 @@
-from typing import Annotated
-
-from fastapi import Depends, status, HTTPException
-from sqlalchemy import insert, select, update
-from sqlalchemy import func
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.backend.utils.abstract_uow import AbstractUnitOfWork
-from app.models import Product, Rating, Review
+
 from app.schemas import RequestReview
-from app.routers.permissions import get_current_user
 from app.backend.utils.exceptions import (
     YouAreNotAdmin,
     NoItemError,
-    NoUserError,
-    IncorrectCredentailsError,
     NotTheBuyerOfProduct,
     NoProductBySlugError,
     YouAreNotAdmin,
