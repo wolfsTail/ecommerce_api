@@ -14,6 +14,7 @@ WORKDIR $HOME
 
 COPY app app
 ADD alembic.ini .
+ADD requerments.txt .
 
 RUN pip install --upgrade pip \
     && pip install -r app/requirements.txt \
