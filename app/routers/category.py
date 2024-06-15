@@ -1,9 +1,6 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status, HTTPException
-from sqlalchemy import insert, select, update
-from slugify import slugify
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.backend.db_depends import get_db
 from app.models import Category
