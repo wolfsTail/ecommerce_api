@@ -1,0 +1,40 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: ./app/dockerfile.prod   
+    command: uvicorn app.main:app --host 0.0.0.0
+    ports:
+      - 8000:8000
+    depends_on:
+      - database
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASS}
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_HOST=${DB_HOST}
+      - POSTGRES_PORT=${DB_PORT}
+    env_file:
+      - .env
+
+  database:
+    image: postgres:16
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASS}
+      - POSTGRES_DB=${DB_NAME}
+
+    env_file:
+      - .env
+  
+  nginx:
+    build: nginx
+    ports:
+      - 127.0.0.1:8080:80
+    depends_on:
+      - web
+
+volumes:
+  postgres_data:
